@@ -70,6 +70,7 @@
 #include "eval.h"
 #include "stats.h"
 #include "ptrace.h"
+#include "mtrace.h"
 #include "dlite.h"
 #include "sim.h"
 
@@ -100,6 +101,10 @@ static int fastfwd_count;
 /* pipeline trace range and output filename */
 static int ptrace_nelt = 0;
 static char *ptrace_opts[2];
+
+/* memory pipeline trace range and output filename */
+static int mtrace_nelt = 0;
+static char *mtrace_opts[1];
 
 /* instruction fetch queue size (in insts) */
 static int ruu_ifq_size;
@@ -594,6 +599,11 @@ sim_reg_options(struct opt_odb_t *odb)
   opt_reg_string_list(odb, "-ptrace",
 	      "generate pipetrace, i.e., <fname|stdout|stderr> <range>",
 	      ptrace_opts, /* arr_sz */2, &ptrace_nelt, /* default */NULL,
+	      /* !print */FALSE, /* format */NULL, /* !accrue */FALSE);
+
+  opt_reg_string_list(odb, "-mtrace",
+	      "generate memory pipetrace, i.e., <fname|stdout|stderr>",
+	      mtrace_opts, /* arr_sz */1, &mtrace_nelt, /* default */NULL,
 	      /* !print */FALSE, /* format */NULL, /* !accrue */FALSE);
 
   opt_reg_note(odb,
@@ -1424,6 +1434,12 @@ sim_load_prog(char *fname,		/* program to load */
   else
     fatal("bad pipetrace args, use: <fname|stdout|stderr> <range>");
 
+  /* Memory tracing */
+  if (mtrace_nelt == 1)
+  {
+	  mtrace_open(mtrace_opts[0], NULL);
+  }
+
   /* finish initialization of the simulation engine */
   fu_pool = res_create_pool("fu-pool", fu_config, N_ELT(fu_config));
   rslink_init(MAX_RS_LINKS);
@@ -1452,6 +1468,9 @@ sim_uninit(void)
 {
   if (ptrace_nelt > 0)
     ptrace_close();
+
+  if (mtrace_nelt > 0)
+    mtrace_close();
 }
 
 
@@ -2167,7 +2186,6 @@ ruu_commit(void)
 	      == (F_MEM|F_STORE))
 	    {
 	      struct res_template *fu;
-
 
 	      /* stores must retire their store value to the cache at commit,
 		 try to get a store port (functional unit allocation) */
@@ -3849,20 +3867,24 @@ ruu_dispatch(void)
 
       /* update memory access stats */
       if (MD_OP_FLAGS(op) & F_MEM)
-	{
-	  sim_total_refs++;
-	  if (!spec_mode)
-	    sim_num_refs++;
+      {
+		  sim_total_refs++;
+		  if (!spec_mode)
+			sim_num_refs++;
 
-	  if (MD_OP_FLAGS(op) & F_STORE)
-	    is_write = TRUE;
-	  else
-	    {
-	      sim_total_loads++;
-	      if (!spec_mode)
-		sim_num_loads++;
-	    }
-	}
+		  if (MD_OP_FLAGS(op) & F_STORE)
+		  {
+			is_write = TRUE;
+			mtrace_newstore(sizeof(md_inst_t), addr);
+		  }
+		  else
+		  {
+			  sim_total_loads++;
+			  mtrace_newload(sizeof(md_inst_t), addr);
+			  if (!spec_mode)
+				  sim_num_loads++;
+		  }
+      }
 
       br_taken = (regs.regs_NPC != (regs.regs_PC + sizeof(md_inst_t)));
       br_pred_taken = (pred_PC != (regs.regs_PC + sizeof(md_inst_t)));
