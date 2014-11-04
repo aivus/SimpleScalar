@@ -3875,12 +3875,12 @@ ruu_dispatch(void)
 		  if (MD_OP_FLAGS(op) & F_STORE)
 		  {
 			is_write = TRUE;
-			mtrace_newstore(sizeof(md_inst_t), addr);
+			mtrace_newstore(4, addr);
 		  }
 		  else
 		  {
 			  sim_total_loads++;
-			  mtrace_newload(sizeof(md_inst_t), addr);
+			  mtrace_newload(4, addr);
 			  if (!spec_mode)
 				  sim_num_loads++;
 		  }
